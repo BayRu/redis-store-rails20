@@ -15,6 +15,7 @@ Then configure Rails:
     config.cache_store = :redis_store_rails20
 
 By default it will attempt to connect to Redis running at localhost. To change:
+
   config.action_controller.session = {
     :cache => MANUALLY_INITIALIZE_REDIS_STORE_RAILS20, #if you want a single connection and don't trust my connection caching
     :uri => URI_OF_REDIS,
