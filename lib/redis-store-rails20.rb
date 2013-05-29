@@ -1,5 +1,6 @@
 require "active_support"
 require 'redis'
+require 'cgi/session'
 
 class CGI::Session::RedisStoreRails20 
 
