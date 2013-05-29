@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.summary     = %q{Redis session store for Rails 2 apps}
   s.description = %q{Redis session store for Rails 2 apps}
 
-  s.rubyforge_project = "redis-store-rails2"
+  s.rubyforge_project = "redis-store-rails20"
 
   s.require_paths = ["lib"]
 end
