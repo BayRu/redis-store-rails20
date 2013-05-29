@@ -1,16 +1,32 @@
 require "active_support"
-require "active_support/cache"
+require 'redis'
 
-class RedisStoreRails2 < ActiveSupport::Cache::Store
+class RedisStoreRails20 
 
   class Error < StandardError; end
-
-  def initialize(address=nil)
-    address ||= "redis://localhost:6379"
+  def logger
+    @logger||=Logger.new(STDERR)
+  end
+  def check_id(_id)
+    return true if _id=~/^[0-9a-zA-Z]+$/
+    return false
+  end
+  def initialize(session,opts)
+     unless check_id(session.session_id)
+       raise ArgumentError, "session_id '%s' is invalid" % session.session_id 
+     end
+    @store = opts['cache']  
+    places_to_look = %w(address uri) 
+    address = places_to_look.map{|e|opts[e]}.compact.first|| "redis://localhost:6379"
+    @session_data = {}
+    @session_key = "session:#{session.session_id}"
+    
 
     uri = URI.parse(address)
     password = uri.password || uri.user
-    @options  = { :host => uri.host, :port => uri.port }
+    h = uri.host || opts['host'] || opts['hostname'] || 'localhost'
+    p = (uri.port || opts['port'] || 6379).to_i
+    @options  = { :host => h, :port => p }
     @options.merge!(:password => password) if password
 
     handle_errors do
@@ -18,55 +34,67 @@ class RedisStoreRails2 < ActiveSupport::Cache::Store
     end
   end
 
-  def read(key, options = {})
-    super
+  def restore 
+    options = {}
     handle_errors(options) do
-      store.get(key)
+      @session_data = store.get(@session_key)||{}
     end
   end
 
-  def write(key, value, options={})
-    super
+  def write
+    options = {}
     handle_errors({ :default_value => false }.merge(options)) do
       response = if ttl = options[:expires_in]
-        store.setex(key, ttl, value)
+        store.setex(@session_key, ttl, @session_data)
       else
-        store.set(key, value)
+        store.set(@session_key,@session_data)
       end
       response == "OK"
     end
   end
 
-  def delete(key, options={})
-    super
+  def delete
+    options = {}
     handle_errors({ :default_value => false }.merge(options)) do
-      response = store.del(key)
+      response = store.del(@session_key)
       response >= 0
     end
+    @session_data={}
   end
 
-  def increment(key, amount = 1, options={})
-    handle_errors(options) do
-      store.incrby(key, amount)
-    end
-  end
 
-  def decrement(key, amount = 1, options={})
-    handle_errors(options) do
-      store.decrby(key, amount)
-    end
-  end
-
-  def clear(options={})
-    handle_errors(options) do
-      store.flushdb
-    end
-  end
 
   protected
+  class HashHash
+    def hashhash(h)
+      if h.is_a?(Hash)
+        h.to_a.sort_by{|e|e.first.inspect}.inspect
+      else
+        h
+      end
+    end
+    def set x,y
+      super(hashhash(x),y)
+    end 
 
+    def get x
+      super(hashhash(x))
+    end 
+    def []= x,y
+      super(hashhash(x),y)
+    end 
+
+    def [] x
+      super(hashhash(x))
+    end 
+  end 
+  def self.connection_cache opts
+    (@@connection_cache||=HashHash.new)
+  end
   def store
-    @store ||= Redis.new(@options)
+    @store ||=begin
+      self.class.connection_cache[@options]||= Redis.new(@options)
+    end
   end
 
   class RedisTimeoutError < Exception; end
